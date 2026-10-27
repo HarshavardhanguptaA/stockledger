@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Management - Sivakami Traders</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .expense-page-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+      max-width: 100%;
+    }
+    .expense-page-layout .card,
+    .add-expense-card,
+    .vehicle-expense-card,
+    .personal-expense-card {
+      width: 100%;
+      max-width: 100%;
+    }
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+    }
+    .edit-highlight {
+      border: 2px solid var(--primary-color) !important;
+      background-color: var(--warning-bg) !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-container"><img src="../assets/logo.png" alt="ST" class="logo-placeholder" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;">ST</span></div>
+        <div><h1 class="brand-name">Sivakami</h1><span class="brand-sub">Traders</span></div>
+      </div>
+      <ul class="sidebar-menu">
+        <li class="menu-item"><a href="admin-dashboard.html">Dashboard</a></li>
+        <li class="menu-item"><a href="materials.html">Products</a></li>
+        <li class="menu-item"><a href="add-stock.html">Add Stock</a></li>
+        <li class="menu-item"><a href="stock-out.html">Sales</a></li>
+        <li class="menu-item"><a href="customers.html">Customers</a></li>
+        <li class="menu-item"><a href="receipts.html">Receipts</a></li>
+        <li class="menu-item active"><a href="expenses.html">Expense</a></li>
+        <li class="menu-item"><a href="reports.html">Reports</a></li>
+        <li class="menu-item"><a href="#" id="notepad-link">Notepad</a></li>
+        <li class="menu-item"><a href="settings.html">Settings</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="user-profile"><span class="profile-name" id="user-display-name">Admin</span><span class="profile-role">Administrator</span></div>
+        <button class="btn-logout" id="logout-button">Logout</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <header class="content-header">
+        <h2 class="page-title">Expense Management</h2>
+        <div style="font-size:13px;color:var(--text-muted);">Record, update, and manage company logistics and personal admin expenses</div>
+      </header>
+
+      <div class="content-body">
+        <div class="expense-page-layout">
+          
+          <!-- EXPENSE ENTRY FORM CARD -->
+          <div class="card add-expense-card table-container" id="form-expense-container">
+            <div class="table-header">
+              <h3 style="font-family:'Outfit';font-size:16px;" id="expense-form-title">Add New Expense</h3>
+            </div>
+            <div style="padding: 20px;">
+              <form id="expense-form">
+                <input type="hidden" id="expense-id">
+                
+                <!-- Date -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Expense Date *</label>
+                  <input type="date" id="exp-date" class="form-control" required>
+                </div>
+                
+                <!-- Category -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Category *</label>
+                  <select id="exp-category" class="form-control" required>
+                    <option value="">-- Select Category --</option>
+                    <option value="product">Product / Stock</option>
+                    <option value="vehicle">Vehicle / Logistics</option>
+                    <option value="personal">Personal / Admin</option>
+                  </select>
+                </div>
+
+                <!-- Product / Stock Details Panel -->
+                <div id="panel-product" style="display: none;">
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Supplier / Mill / Details</label>
+                    <input type="text" id="exp-supplier-name" class="form-control" placeholder="e.g. Dalmia Plant, Local Quarry...">
+                  </div>
+                </div>
+
+                <!-- Vehicle Details Panel -->
+                <div id="panel-vehicle" style="display: none;">
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Vehicle Number *</label>
+                    <input type="text" id="exp-vehicle-number" class="form-control" placeholder="e.g. TN-45-A-1234">
+                  </div>
+                </div>
+
+                <!-- Personal Details Panel -->
+                <div id="panel-personal" style="display: none;">
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Person Name *</label>
+                    <select id="exp-person-name" class="form-control">
+                      <option value="">-- Select Person --</option>
+                      <option value="Sabarish">Sabarish</option>
+                      <option value="Arumugam">Arumugam</option>
+                      <option value="Ramakrishnan">Ramakrishnan</option>
+                      <option value="Satheesh">Satheesh</option>
+                      <option value="Sailesh">Sailesh</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Expense Type -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Expense Type *</label>
+                  <select id="exp-type" class="form-control" required disabled>
+                    <option value="">-- Select Category First --</option>
+                  </select>
+                </div>
+
+                <!-- Amount -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Amount (₹) *</label>
+                  <input type="number" id="exp-amount" class="form-control" placeholder="0.00" min="0" step="0.01" required>
+                </div>
+
+                <!-- Remarks -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                  <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Description / Remarks</label>
+                  <input type="text" id="exp-remarks" class="form-control" placeholder="Remarks...">
+                </div>
+
+                <!-- Actions -->
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                  <button type="button" class="btn btn-secondary" id="btn-cancel-edit" style="display:none;">Cancel Edit</button>
+                  <button type="submit" class="btn btn-primary" id="btn-submit">Add Expense</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- PRODUCT / STOCK EXPENSES TABLE -->
+          <div class="card product-expense-card table-container">
+            <div class="table-header">
+              <h3 style="font-family:'Outfit';font-size:16px;">Product / Stock Expenses</h3>
+            </div>
+            <div style="max-height: 280px; overflow-y: auto; overflow-x: auto; width: 100%;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th>Date</th>
+                    <th>Expense Type</th>
+                    <th>Supplier / Details</th>
+                    <th>Amount (₹)</th>
+                    <th>Remarks</th>
+                    <th class="actions-col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="product-expenses-body">
+                  <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading product / stock expenses...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- VEHICLE / LOGISTICS EXPENSES TABLE -->
+          <div class="card vehicle-expense-card table-container">
+            <div class="table-header">
+              <h3 style="font-family:'Outfit';font-size:16px;">Vehicle / Logistics Expenses</h3>
+            </div>
+            <div style="max-height: 280px; overflow-y: auto; overflow-x: auto; width: 100%;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th>Date</th>
+                    <th>Vehicle Number</th>
+                    <th>Expense Type</th>
+                    <th>Amount (₹)</th>
+                    <th>Remarks</th>
+                    <th class="actions-col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="vehicle-expenses-body">
+                  <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading vehicle expenses...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PERSONAL / ADMIN EXPENSES TABLE -->
+          <div class="card personal-expense-card table-container">
+            <div class="table-header">
+              <h3 style="font-family:'Outfit';font-size:16px;">Personal / Admin Expenses</h3>
+            </div>
+            <div style="max-height: 280px; overflow-y: auto; overflow-x: auto; width: 100%;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th>Date</th>
+                    <th>Person Name</th>
+                    <th>Expense Type</th>
+                    <th>Amount (₹)</th>
+                    <th>Remarks</th>
+                    <th class="actions-col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="personal-expenses-body">
+                  <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading personal expenses...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="notification"></div>
+  <script src="../js/common.js"></script>
+  <script src="../js/expenses.js"></script>
+</body>
+</html>

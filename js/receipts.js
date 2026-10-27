@@ -1,0 +1,573 @@
+document.addEventListener('DOMContentLoaded', async () => {
+ // Session check
+ let currentUser = null;
+ try {
+ currentUser = await window.api.getSession();
+ if (!currentUser || currentUser.role !== 'admin') {
+ window.location.href = 'login.html';
+ return;
+ }
+ document.getElementById('user-display-name').textContent = currentUser.name;
+ } catch (err) {
+ console.error('Session validation error:', err);
+ window.location.href = 'login.html';
+ return;
+ }
+
+ // Logout handler
+ document.getElementById('logout-button').addEventListener('click', async () => {
+ await window.api.logout();
+ window.location.href = 'login.html';
+ });
+
+ // UI Toast helper
+ const showToast = (message, type = 'success') => {
+ const toast = document.getElementById('toast');
+ toast.textContent = message;
+ toast.className = `notification show ${type}`;
+ setTimeout(() => {
+ toast.className = 'notification';
+ }, 4000);
+ };
+
+ // References to elements
+ const filterCust = document.getElementById('filter-cust');
+ const filterFrom = document.getElementById('filter-from');
+ const filterTo = document.getElementById('filter-to');
+ const btnFilter = document.getElementById('btn-filter');
+ const btnClearFilter = document.getElementById('btn-clear-filter');
+ const tableBody = document.getElementById('receipts-table-body');
+ const receiptCount = document.getElementById('receipt-count');
+ const detailModal = document.getElementById('receipt-detail-modal');
+ const detailBody = document.getElementById('receipt-detail-body');
+
+ // Load receipts list
+ async function loadReceipts() {
+ try {
+ tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">Loading receipts...</td></tr>`;
+
+ const filters = {
+ customer_name: filterCust.value.trim(),
+ from_date: filterFrom.value,
+ to_date: filterTo.value
+ };
+
+ const receipts = await window.api.getReceipts(filters);
+ receiptCount.textContent = `Found ${receipts.length} receipt(s)`;
+ renderReceipts(receipts);
+ } catch (err) {
+ showToast('Error loading receipts: ' + err.message, 'error');
+ }
+ }
+
+ // Render receipts table
+ function renderReceipts(receipts) {
+ tableBody.innerHTML = '';
+ if (receipts.length === 0) {
+ tableBody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-muted);">No receipts found matching filters.</td></tr>`;
+ return;
+ }
+
+ receipts.forEach((r, index) => {
+ const tr = document.createElement('tr');
+ const date = new Date(r.receipt_date || r.created_at).toLocaleDateString('en-IN', {
+ day: '2-digit', month: '2-digit', year: 'numeric'
+ });
+
+ const pdfBadge = r.pdf_path
+ ? `<span class="status-badge available" style="cursor:pointer;" onclick="window.viewReceiptPdf('${r.id}', '${escapeHtml(r.pdf_path)}')"> PDF</span>`
+ : `<span class="status-badge pending"> Missing</span>`;
+
+ // Format products purchased
+ let productsHtml = '-';
+ if (r.products_purchased) {
+ const prodList = r.products_purchased.split(',').filter(x => x.trim() !== '');
+ if (prodList.length > 3) {
+ const shown = prodList.slice(0, 2).map(p => {
+ const parts = p.split(' ×');
+ if (parts.length < 2) return p;
+ const name = parts[0];
+ const qtyPart = parts[1] || '';
+ const qtyNum = qtyPart.split(' ')[0];
+ return `${escapeHtml(name)} ×${escapeHtml(qtyNum)}`;
+ }).join('<br>');
+ productsHtml = `${shown}<br><span style="color:var(--primary-color);font-weight:600;">+${prodList.length - 2} more...</span>`;
+ } else {
+ productsHtml = prodList.map(p => escapeHtml(p)).join('<br>');
+ }
+ }
+
+ tr.innerHTML = `
+ <td style="color:var(--text-muted);font-size:12px;font-weight:600;">${index + 1}</td>
+ <td><strong class="receipt-link" style="cursor:pointer;color:var(--primary-color);" data-id="${r.id}">${escapeHtml(r.receipt_number || 'RCP-MISSING')}</strong></td>
+ <td>${date}</td>
+ <td><strong>${escapeHtml(r.customer_name)}</strong></td>
+ <td>${escapeHtml(r.customer_phone || '-')}</td>
+ <td style="font-size:12px;max-width:240px;line-height:1.4;">${productsHtml}</td>
+ <td>Rs.${parseFloat(r.total_amount || 0).toFixed(2)}</td>
+ <td>Rs.${parseFloat(r.paid_amount || 0).toFixed(2)}</td>
+ <td style="${parseFloat(r.balance_amount) > 0 ? 'color:var(--danger-color);font-weight:bold' : 'color:var(--success-color);'}">
+ Rs.${parseFloat(r.balance_amount || 0).toFixed(2)}
+ </td>
+ <td>${pdfBadge}</td>
+    <td class="actions-col">
+    <div class="table-actions">
+    <button class="btn btn-action btn-view btn-view-receipt-row" data-id="${r.id}" title="View Receipt">View</button>
+    <button class="btn btn-action btn-whatsapp btn-whatsapp-receipt" data-id="${r.id}" title="Send via WhatsApp">WhatsApp</button>
+    <button class="btn btn-action btn-pdf btn-view-pdf" data-id="${r.id}" data-path="${escapeHtml(r.pdf_path || '')}" title="Download PDF">&#8659; PDF</button>
+    <button class="btn btn-action btn-payment btn-update-pay" data-id="${r.id}" title="Record Payment">Payment</button>
+    <button class="btn btn-action btn-delete btn-delete-receipt" data-id="${r.id}" data-num="${escapeHtml(r.receipt_number || '')}" title="Delete Receipt">Delete</button>
+    </div>
+    </td>
+  `;
+  tableBody.appendChild(tr);
+ });
+ }
+
+ // Handle PDF open / generate
+ async function handlePdfAction(receiptId, existingPath) {
+ let shouldGenerate = !existingPath;
+ if (existingPath) {
+ const exists = await window.api.fileExists(existingPath);
+ if (!exists) {
+ shouldGenerate = true;
+ }
+ }
+
+ if (shouldGenerate) {
+ showToast('Generating receipt PDF, please wait...', 'pending');
+ try {
+ const res = await window.api.generatePDF({ receiptId });
+ if (res.success) {
+ showToast('PDF generated successfully!', 'success');
+ loadReceipts();
+ await window.api.openPath(res.filePath);
+ } else {
+ showToast('PDF Generation failed: ' + res.error, 'error');
+ }
+ } catch (err) {
+ showToast('Error generating PDF: ' + err.message, 'error');
+ }
+ } else {
+ try {
+ const res = await window.api.openPath(existingPath);
+ if (!res.success) {
+ showToast('Could not open file: ' + res.error, 'error');
+ }
+ } catch (err) {
+ showToast('Error opening file: ' + err.message, 'error');
+ }
+ }
+ }
+
+ // Handle WhatsApp action — opens WhatsApp Web with a pre-filled text message
+ async function handleWhatsAppAction(receiptId) {
+ try {
+ const receipt = await window.api.getReceiptById(receiptId);
+ if (!receipt) {
+ showToast('Receipt not found.', 'error');
+ return;
+ }
+
+ const settings = await window.api.getCompanySettings();
+ const companyName = settings?.company_name || 'Sivakami Traders';
+
+ // Format phone number to international format
+ let phone = (receipt.customer_phone || '').replace(/[\s\+\(\)\-\[\]]/g, '');
+ let formattedPhone = '';
+ if (phone.length === 10 && /^\d+$/.test(phone)) {
+ formattedPhone = '91' + phone;
+ } else if (phone.length === 12 && phone.startsWith('91') && /^\d+$/.test(phone)) {
+ formattedPhone = phone;
+ }
+
+ if (!formattedPhone) {
+ alert("Customer phone number is missing.");
+ return;
+ }
+
+ // Build the receipt message text
+ const date = new Date(receipt.receipt_date || receipt.created_at).toLocaleDateString('en-IN');
+ let itemsStr = '';
+ if (receipt.items && receipt.items.length > 0) {
+ itemsStr = receipt.items.map((item, i) =>
+ `${i + 1}. ${item.material_name}: ${item.quantity} ${item.unit} x Rs.${parseFloat(item.rate).toFixed(2)} = Rs.${parseFloat(item.total).toFixed(2)}`
+ ).join('\n');
+ } else {
+ itemsStr = 'No item details available.';
+ }
+
+ const msg =
+ `*${companyName}*\n` +
+ `Receipt No: ${receipt.receipt_number || 'RCP-MISSING'}\n` +
+ `Date: ${date}\n` +
+ `Customer: ${receipt.customer_name}\n` +
+ `-----------------------------\n` +
+ `${itemsStr}\n` +
+ `-----------------------------\n` +
+ `Total Amount: Rs.${parseFloat(receipt.total_amount).toFixed(2)}\n` +
+ `Paid Amount: Rs.${parseFloat(receipt.paid_amount).toFixed(2)}\n` +
+ `Balance Due: Rs.${parseFloat(receipt.balance_amount).toFixed(2)}\n` +
+ `-----------------------------\n` +
+ `Thank you for your business!`;
+
+ // Open WhatsApp Web with pre-filled message
+ const encoded = encodeURIComponent(msg);
+ const waUrl = `https://wa.me/${formattedPhone}?text=${encoded}`;
+ await window.api.openExternal(waUrl);
+
+ // Mark as sent
+ await window.api.markWhatsappSent(receiptId);
+ showToast('WhatsApp opened with receipt message!');
+ } catch (err) {
+ showToast('Error opening WhatsApp: ' + err.message, 'error');
+ }
+ }
+
+ // Open detail modal
+ async function openDetailModal(id) {
+ detailBody.innerHTML = `<p style="text-align:center;color:var(--text-muted);padding:30px 0;">Loading receipt details...</p>`;
+ detailModal.classList.add('show');
+
+ try {
+ const receipt = await window.api.getReceiptById(id);
+ if (!receipt) {
+ detailBody.innerHTML = `<p style="text-align:center;color:var(--danger-color);padding:30px 0;">Receipt details not found.</p>`;
+ return;
+ }
+
+ const settings = await window.api.getCompanySettings();
+ const itemsHtml = (receipt.items || []).map(item => `
+ <tr>
+ <td>${escapeHtml(item.material_name)}</td>
+ <td style="text-align:center;">${item.quantity} ${escapeHtml(item.unit)}</td>
+ <td style="text-align:right;">₹${parseFloat(item.rate).toFixed(2)}</td>
+ <td style="text-align:right;"><strong>₹${parseFloat(item.total).toFixed(2)}</strong></td>
+ </tr>
+ `).join('');
+
+ // Build payments list
+ let paymentsHtml = '';
+ if (receipt.payments && receipt.payments.length > 0) {
+ const rows = receipt.payments.map(p => `
+ <tr>
+ <td>${new Date(p.payment_date).toLocaleDateString('en-IN')}</td>
+ <td style="text-align:right;">₹${parseFloat(p.amount).toFixed(2)}</td>
+ <td>${escapeHtml(p.remarks || '-')}</td>
+ </tr>
+ `).join('');
+ 
+ paymentsHtml = `
+ <div style="margin-bottom:16px;">
+ <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin:0 0 6px 0; letter-spacing:0.5px;">Payment History</h4>
+ <table class="data-table" style="font-size:12px; margin-bottom:0; border:1px solid #eee;">
+ <thead>
+ <tr style="background:#f1f5f9;">
+ <th>Date</th>
+ <th style="text-align:right; width:120px;">Amount</th>
+ <th>Remarks</th>
+ </tr>
+ </thead>
+ <tbody>
+ ${rows}
+ </tbody>
+ </table>
+ </div>
+ `;
+ }
+
+ detailBody.innerHTML = `
+ <div style="font-family: 'Outfit', sans-serif;">
+ <!-- Receipt Header / Branding -->
+ <div style="border-bottom: 2px solid var(--primary-color); padding-bottom: 12px; margin-bottom: 16px;">
+ <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+ <div style="display:flex; align-items:center; gap:12px;">
+ <img src="../assets/logo.png" alt="ST" style="height:48px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="this.style.display='none';">
+ <div>
+ <h2 style="color:var(--text-main); margin:0 0 4px 0; font-family:'Outfit'; font-size:22px;">${escapeHtml(settings.company_name || 'Sivakami Traders')}</h2>
+ <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">
+ ${settings.address ? escapeHtml(settings.address) + '<br>' : ''}
+ ${settings.phone ? 'Phone: ' + escapeHtml(settings.phone) + ' ' : ''}
+ ${settings.email ? '| Email: ' + escapeHtml(settings.email) : ''}
+ ${settings.gstin ? '<br>GSTIN: ' + escapeHtml(settings.gstin) : ''}
+ </div>
+ </div>
+ </div>
+ <div style="text-align:right;">
+ <div class="status-badge" style="background:var(--primary-color); color:#fff; font-size:11px; font-weight:600; text-transform:uppercase;">${receipt.movement_type || 'Stock Out'}</div>
+ <div style="font-size:13px; font-weight:bold; color:var(--text-main); margin-top:6px;">${(() => {
+    if (!receipt.receipt_number) {
+      console.error('Receipt ID ' + receipt.id + ' is missing receipt_number');
+      return 'RCP-MISSING';
+    }
+    return escapeHtml(receipt.receipt_number);
+  })()}</div>
+ <div style="font-size:11px; color:var(--text-muted);">${new Date(receipt.receipt_date || receipt.created_at).toLocaleString()}</div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Customer details -->
+ <div style="margin-bottom:16px;">
+ <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin:0 0 6px 0; letter-spacing:0.5px;">Customer Info</h4>
+ <div style="background:#f8fafc; border-radius:6px; padding:10px 14px; font-size:13px;">
+ <div style="margin-bottom:4px;"><strong>Name:</strong> ${escapeHtml(receipt.customer_name)}</div>
+ ${receipt.customer_phone ? `<div style="margin-bottom:4px;"><strong>Phone:</strong> ${escapeHtml(receipt.customer_phone)}</div>` : ''}
+ ${receipt.customer_address ? `<div><strong>Address:</strong> ${escapeHtml(receipt.customer_address)}</div>` : ''}
+ </div>
+ </div>
+
+ <!-- Items Table -->
+ <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin:0 0 6px 0; letter-spacing:0.5px;">Items</h4>
+ <table class="data-table" style="margin-bottom:16px; font-size:13px;">
+ <thead>
+ <tr style="background:var(--bg-primary); color:#white;">
+ <th>Material / Product</th>
+ <th style="text-align:center; width:80px;">Qty</th>
+ <th style="text-align:right; width:90px;">Rate</th>
+ <th style="text-align:right; width:110px;">Amount</th>
+ </tr>
+ </thead>
+ <tbody>
+ ${itemsHtml}
+ </tbody>
+ </table>
+
+ <!-- Totals block -->
+ <div style="display:grid; grid-template-columns:1fr 200px; gap:20px; align-items:start; margin-bottom:16px;">
+ <div>
+ ${receipt.remarks ? `
+ <div style="background:#fffde7; border: 1px solid #ffe082; border-radius:4px; padding:8px 12px; font-size:12px;">
+ <strong>Remarks:</strong> ${escapeHtml(receipt.remarks)}
+ </div>
+ ` : ''}
+ </div>
+ <div style="background:#f1f5f9; border-radius:6px; padding:12px; font-size:13px;">
+ <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+ <span>Total:</span>
+ <strong>₹${parseFloat(receipt.total_amount).toFixed(2)}</strong>
+ </div>
+ <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:var(--success-color);">
+ <span>Total Received:</span>
+ <strong>₹${parseFloat(receipt.paid_amount).toFixed(2)}</strong>
+ </div>
+ <div style="display:flex; justify-content:space-between; border-top:1px solid #ccc; padding-top:6px; font-size:14px; ${parseFloat(receipt.balance_amount) > 0 ? 'color:var(--danger-color);font-weight:bold' : 'color:var(--success-color);'}">
+ <span>Balance:</span>
+ <strong>₹${parseFloat(receipt.balance_amount).toFixed(2)}</strong>
+ </div>
+ </div>
+ </div>
+
+ <!-- Payment History Section -->
+ ${paymentsHtml}
+
+ <!-- Actions Footer -->
+ <div class="receipt-view-actions">
+ <button class="btn btn-secondary modal-detail-close-btn">Close</button>
+ <button class="btn btn-primary modal-pdf-btn">
+ ${receipt.pdf_path ? '&#x1F4C4; Open PDF' : '&#x2B07; Generate PDF'}
+ </button>
+ <button class="btn btn-success modal-wa-btn">&#x1F4AC; WhatsApp</button>
+ </div>
+ </div>
+ `;
+
+ // Set up click handlers inside modal
+ detailBody.querySelector('.modal-detail-close-btn').addEventListener('click', () => {
+ closeDetailModal();
+ });
+ detailBody.querySelector('.modal-pdf-btn').addEventListener('click', () => {
+ handlePdfAction(receipt.id, receipt.pdf_path);
+ closeDetailModal();
+ });
+ detailBody.querySelector('.modal-wa-btn').addEventListener('click', () => {
+ handleWhatsAppAction(receipt.id);
+ closeDetailModal();
+ });
+
+ } catch (err) {
+ detailBody.innerHTML = `<p style="text-align:center;color:var(--danger-color);padding:30px 0;">Error loading details: ${escapeHtml(err.message)}</p>`;
+ }
+ }
+
+ // Close modal helper
+ function closeDetailModal() {
+ detailModal.classList.remove('show');
+ }
+
+ const closeReceiptDetailBtn = document.getElementById('btn-close-receipt-detail');
+ if (closeReceiptDetailBtn) closeReceiptDetailBtn.addEventListener('click', closeDetailModal);
+
+ window.closeDetailModal = closeDetailModal;
+
+ // Close modal when clicking outside
+ window.addEventListener('click', (event) => {
+ if (event.target === detailModal) {
+ closeDetailModal();
+ }
+ });
+
+  // Event Delegation on table body for dynamic row elements
+  tableBody.addEventListener('click', async (e) => {
+    // 1. View / Receipt Link click
+    const viewBtn = e.target.closest('.btn-view-receipt-row') || e.target.closest('.receipt-link');
+    if (viewBtn) {
+      const id = parseInt(viewBtn.dataset.id);
+      openDetailModal(id);
+      return;
+    }
+    
+    // 2. WhatsApp click
+    const waBtn = e.target.closest('.btn-whatsapp-receipt');
+    if (waBtn) {
+      const id = parseInt(waBtn.dataset.id);
+      handleWhatsAppAction(id);
+      return;
+    }
+
+    // 3. PDF click
+    const pdfBtn = e.target.closest('.btn-view-pdf');
+    if (pdfBtn) {
+      const id = parseInt(pdfBtn.dataset.id);
+      const path = pdfBtn.dataset.path;
+      handlePdfAction(id, path);
+      return;
+    }
+
+    // 4. Record Payment click
+    const payBtn = e.target.closest('.btn-update-pay');
+    if (payBtn) {
+      const id = parseInt(payBtn.dataset.id);
+      openPayUpdateModal(id);
+      return;
+    }
+
+    // 5. Delete Receipt click
+    const deleteBtn = e.target.closest('.btn-delete-receipt');
+    if (deleteBtn) {
+      const id = parseInt(deleteBtn.dataset.id);
+      const num = deleteBtn.dataset.num;
+      deleteReceipt(id, num);
+      return;
+    }
+
+    // 6. PDF status badge click
+    const approvedBadge = e.target.closest('.status-badge.approved');
+    if (approvedBadge) {
+      const path = approvedBadge.getAttribute('title');
+      if (path) {
+        window.api.openPath(path);
+      }
+      return;
+    }
+  });
+
+  // Filter Listeners
+ btnFilter.addEventListener('click', loadReceipts);
+ btnClearFilter.addEventListener('click', () => {
+ filterCust.value = '';
+ filterFrom.value = '';
+ filterTo.value = '';
+ loadReceipts();
+ });
+
+ // Search on enter key
+ filterCust.addEventListener('keypress', (e) => {
+ if (e.key === 'Enter') {
+ loadReceipts();
+ }
+ });
+
+ // Escape HTML helper
+ function escapeHtml(text) {
+ const div = document.createElement('div');
+ div.textContent = text;
+ return div.innerHTML;
+ }
+
+ // Payment Update Modal Controls
+ const payModal = document.getElementById('update-payment-modal');
+
+ async function openPayUpdateModal(id) {
+ document.getElementById('pay-update-alert').style.display = 'none';
+ document.getElementById('pay-update-form').reset();
+ payModal.style.display = 'flex';
+
+ try {
+ const receipt = await window.api.getReceiptById(id);
+ if (!receipt) return;
+
+ document.getElementById('pay-receipt-id').value = receipt.id;
+ document.getElementById('pay-receipt-num').textContent = receipt.receipt_number || 'RCP-MISSING';
+ document.getElementById('pay-customer-name').textContent = receipt.customer_name;
+ document.getElementById('pay-total-bill').textContent = '₹' + parseFloat(receipt.total_amount).toFixed(2);
+ document.getElementById('pay-already-paid').textContent = '₹' + parseFloat(receipt.paid_amount).toFixed(2);
+ document.getElementById('pay-remaining-balance').textContent = '₹' + parseFloat(receipt.balance_amount).toFixed(2);
+
+ document.getElementById('pay-update-amount').max = receipt.balance_amount;
+ } catch (err) {
+ console.error(err);
+ }
+ }
+
+ function closePayModal() {
+ payModal.style.display = 'none';
+ }
+
+ document.getElementById('btn-close-pay-modal').addEventListener('click', closePayModal);
+ document.getElementById('btn-cancel-pay-modal').addEventListener('click', closePayModal);
+
+ document.getElementById('pay-update-form').addEventListener('submit', async (e) => {
+ e.preventDefault();
+ const alertEl = document.getElementById('pay-update-alert');
+ alertEl.style.display = 'none';
+
+ const receiptId = parseInt(document.getElementById('pay-receipt-id').value);
+ const amount = parseFloat(document.getElementById('pay-update-amount').value);
+ const remarks = document.getElementById('pay-update-remarks').value.trim();
+
+ if (!amount || amount <= 0) {
+ alertEl.textContent = 'Enter a valid payment amount.';
+ alertEl.style.display = 'block';
+ return;
+ }
+
+ try {
+ showToast('Recording payment...', 'pending');
+ const res = await window.api.addPayment({ receipt_id: receiptId, amount, remarks });
+ if (res.success) {
+ showToast(' Payment updated successfully!');
+ closePayModal();
+ loadReceipts();
+ } else {
+ alertEl.textContent = res.error || 'Failed to save payment.';
+ alertEl.style.display = 'block';
+ showToast('Failed to save payment.', 'error');
+ }
+ } catch (err) {
+ alertEl.textContent = err.message;
+ alertEl.style.display = 'block';
+ showToast('System error occurred.', 'error');
+ }
+ });
+
+ async function deleteReceipt(id, num) {
+ const confirmed = confirm(`Are you sure you want to delete receipt "${num}"?\n\nThis will soft-delete the receipt, reverse all associated stock movements, and adjust the customer's balance.`);
+ if (!confirmed) return;
+ try {
+ showToast('Deleting receipt...', 'pending');
+ const result = await window.api.deleteReceipt(id);
+ if (result.success) {
+ showToast(` Receipt "${num}" deleted and stock reversed.`);
+ loadReceipts();
+ } else {
+ showToast('Error deleting receipt: ' + result.error, 'error');
+ }
+ } catch (err) {
+ showToast('System error: ' + err.message, 'error');
+ }
+ }
+
+ // Initial load
+ loadReceipts();
+});
