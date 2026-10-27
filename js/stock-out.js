@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const settings = await window.api.getCompanySettings();
-      const companyName = settings?.company_name || 'Sivakami Traders';
+      const companyName = settings?.company_name || 'StockLedger Global Trade Ltd.';
 
       // Format phone number to international format
       let phone = (receipt.customer_phone || '').replace(/[\s\+\(\)\-\[\]]/g, '');

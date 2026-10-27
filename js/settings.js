@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', async () => {
  showToast('Opening dialog to select backup file...', 'pending');
  const result = await window.api.restoreDatabase();
  if (result.success) {
- alert('Database restored successfully!\n\nThe application will now restart. Please launch Sivakami Traders again to load the restored database.');
+ alert('Database restored successfully!\n\nThe application will now restart. Please launch StockLedger again to load the restored database.');
  window.close();
  } else {
  showToast('Restore cancelled: ' + result.error, 'error');

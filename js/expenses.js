@@ -57,9 +57,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const productExpensesBody = document.getElementById('product-expenses-body');
 
   // Types definitions
-  const productTypes = ['Dalmia Cement', 'Chettinad Cement', 'Crusher', 'Other'];
-  const vehicleTypes = ['Fuel', 'Driver Allowance', 'Toll Charges', 'Maintenance', 'Loading / Unloading', 'Other'];
-  const personalTypes = ['Worker Pay', 'Tea / Snacks', 'Refreshments', 'Office Expense', 'Salary / Allowance', 'Other'];
+  const productTypes = ['Supplier Procurement', 'Freight & Forwarding', 'Packaging & Crating', 'Warehousing & Storage', 'Equipment Lease', 'Other'];
+  const vehicleTypes = ['Fleet Fuel', 'Driver Allowance', 'Toll & Transit Fees', 'Vehicle Maintenance', 'Loading & Unloading', 'Other'];
+  const personalTypes = ['Staff Payroll', 'Office & Admin Supplies', 'Refreshments & Pantry', 'Facility Maintenance', 'Utilities', 'Other'];
 
   // Initialize
   initExpenses();

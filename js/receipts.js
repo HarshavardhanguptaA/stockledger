@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
  }
 
  const settings = await window.api.getCompanySettings();
- const companyName = settings?.company_name || 'Sivakami Traders';
+ const companyName = settings?.company_name || 'StockLedger Global Trade Ltd.';
 
  // Format phone number to international format
  let phone = (receipt.customer_phone || '').replace(/[\s\+\(\)\-\[\]]/g, '');
@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
  <div style="display:flex; align-items:center; gap:12px;">
  <img src="../assets/logo.png" alt="ST" style="height:48px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="this.style.display='none';">
  <div>
- <h2 style="color:var(--text-main); margin:0 0 4px 0; font-family:'Outfit'; font-size:22px;">${escapeHtml(settings.company_name || 'Sivakami Traders')}</h2>
+ <h2 style="color:var(--text-main); margin:0 0 4px 0; font-family:'Outfit'; font-size:22px;">${escapeHtml(settings.company_name || 'StockLedger Global Trade Ltd.')}</h2>
  <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">
  ${settings.address ? escapeHtml(settings.address) + '<br>' : ''}
  ${settings.phone ? 'Phone: ' + escapeHtml(settings.phone) + ' ' : ''}

@@ -6,23 +6,41 @@ const { app } = require('electron');
 
 // Determine database path
 let dbPath;
-const localDbPath = path.join(__dirname, 'sivakami_traders.db');
+const localDbPath = path.join(__dirname, 'stockledger.db');
+const legacyLocalDbPath = path.join(__dirname, 'sivakami_traders.db');
 
 if (app) {
- const userDataPath = app.getPath('userData');
- dbPath = path.join(userDataPath, 'sivakami_traders.db');
- 
- // If the database does not exist in userData, but exists in the local source directory, copy it over.
- if (!fs.existsSync(dbPath) && fs.existsSync(localDbPath)) {
- try {
- fs.copyFileSync(localDbPath, dbPath);
- console.log('Database migrated/copied to userData from local development database.');
- } catch (e) {
- console.error('Failed to copy database to userData:', e);
- }
- }
+  const userDataPath = app.getPath('userData');
+  dbPath = path.join(userDataPath, 'stockledger.db');
+  const legacyUserDataPath = path.join(userDataPath, 'sivakami_traders.db');
+
+  // If stockledger.db does not exist in userData, migrate from legacy or local if available
+  if (!fs.existsSync(dbPath)) {
+    try {
+      if (fs.existsSync(legacyUserDataPath)) {
+        fs.copyFileSync(legacyUserDataPath, dbPath);
+        console.log('Legacy database migrated to stockledger.db in userData.');
+      } else if (fs.existsSync(localDbPath)) {
+        fs.copyFileSync(localDbPath, dbPath);
+        console.log('Database copied to userData from local database.');
+      } else if (fs.existsSync(legacyLocalDbPath)) {
+        fs.copyFileSync(legacyLocalDbPath, dbPath);
+        console.log('Legacy local database copied to stockledger.db in userData.');
+      }
+    } catch (e) {
+      console.error('Failed to copy/migrate database to userData:', e);
+    }
+  }
 } else {
- dbPath = localDbPath;
+  dbPath = localDbPath;
+  if (!fs.existsSync(dbPath) && fs.existsSync(legacyLocalDbPath)) {
+    try {
+      fs.copyFileSync(legacyLocalDbPath, dbPath);
+      console.log('Legacy local database copied to stockledger.db.');
+    } catch (e) {
+      console.error('Failed to copy legacy local database:', e);
+    }
+  }
 }
 
 // Ensure database directory exists
@@ -265,11 +283,11 @@ async function initDatabase() {
  await run(`
  CREATE TABLE IF NOT EXISTS company_settings (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
- company_name TEXT DEFAULT 'Sivakami Traders',
- address TEXT DEFAULT '',
- phone TEXT DEFAULT '',
- email TEXT DEFAULT '',
- gstin TEXT DEFAULT '',
+ company_name TEXT DEFAULT 'StockLedger Global Trade Ltd.',
+  address TEXT DEFAULT 'Suite 400, Commerce Boulevard, Tech District',
+  phone TEXT DEFAULT '+1 (800) 555-0199',
+  email TEXT DEFAULT 'contact@stockledger.io',
+  gstin TEXT DEFAULT 'US-TAX-849201',
  logo_path TEXT DEFAULT 'assets/logo.png',
  demo_seeded INTEGER DEFAULT 0
  )
@@ -312,6 +330,8 @@ async function initDatabase() {
  await safeAddColumn('stock_movements', 'paid_amount', 'REAL DEFAULT 0');
  await safeAddColumn('stock_movements', 'balance_amount', 'REAL DEFAULT 0');
  await safeAddColumn('stock_movements', 'stock_direction', 'TEXT');
+  await safeAddColumn('stock_movements', 'reference_no', 'TEXT');
+  await safeAddColumn('stock_movements', 'batch_no', 'TEXT');
 
  await safeAddColumn('company_settings', 'demo_seeded', 'INTEGER DEFAULT 0');
 
@@ -319,16 +339,25 @@ async function initDatabase() {
  await safeAddColumn('materials', 'is_deleted', 'INTEGER DEFAULT 0');
  await safeAddColumn('materials', 'deleted_at', 'TEXT');
  await safeAddColumn('materials', 'code', 'TEXT');
+  await safeAddColumn('materials', 'sku', 'TEXT');
+  await safeAddColumn('materials', 'reorder_quantity', 'REAL DEFAULT 0');
+  await safeAddColumn('materials', 'location', "TEXT DEFAULT 'Main Warehouse'");
+  await safeAddColumn('materials', 'barcode', 'TEXT');
 
  await safeAddColumn('customers', 'is_deleted', 'INTEGER DEFAULT 0');
  await safeAddColumn('customers', 'deleted_at', 'TEXT');
  await safeAddColumn('customers', 'customer_type', "TEXT DEFAULT 'Retailer'");
+  await safeAddColumn('customers', 'email', 'TEXT');
+  await safeAddColumn('customers', 'tax_id', 'TEXT');
+  await safeAddColumn('customers', 'credit_limit', 'REAL DEFAULT 0');
 
  // Migrate old 'Direct Customer' values to 'Retailer' in customers table
  await run(`UPDATE customers SET customer_type = 'Retailer' WHERE customer_type = 'Direct Customer' OR customer_type IS NULL OR customer_type = ''`);
 
  // Add customer_type to receipts if not present
  await safeAddColumn('receipts', 'customer_type', 'TEXT');
+  await safeAddColumn('receipts', 'invoice_status', "TEXT DEFAULT 'Completed'");
+  await safeAddColumn('receipts', 'payment_method', "TEXT DEFAULT 'Cash'");
  // Add customer_type to stock_movements if not present
  await safeAddColumn('stock_movements', 'customer_type', 'TEXT');
 
@@ -338,6 +367,33 @@ async function initDatabase() {
 
  await safeAddColumn('stock_movements', 'is_deleted', 'INTEGER DEFAULT 0');
  await safeAddColumn('stock_movements', 'deleted_at', 'TEXT');
+
+  // Performance Indexes for high-frequency queries
+  await run('CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category)');
+  await run('CREATE INDEX IF NOT EXISTS idx_materials_sku ON materials(sku)');
+  await run('CREATE INDEX IF NOT EXISTS idx_materials_name ON materials(name)');
+  await run('CREATE INDEX IF NOT EXISTS idx_stock_movements_mat ON stock_movements(material_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON stock_movements(created_at)');
+  await run('CREATE INDEX IF NOT EXISTS idx_stock_movements_receipt ON stock_movements(receipt_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_receipts_customer ON receipts(customer_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_receipts_date ON receipts(receipt_date)');
+  await run('CREATE INDEX IF NOT EXISTS idx_receipts_number ON receipts(receipt_number)');
+  await run('CREATE INDEX IF NOT EXISTS idx_receipt_items_receipt ON receipt_items(receipt_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)');
+  await run('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)');
+
+  // Auto-generate SKUs for materials where SKU is missing
+  try {
+    const noSkuMaterials = await query("SELECT id, name, category, code FROM materials WHERE sku IS NULL OR sku = ''");
+    for (const m of noSkuMaterials) {
+      const prefix = (m.category ? m.category.substring(0, 3) : 'ITM').toUpperCase().replace(/[^A-Z]/g, 'X');
+      const genSku = m.code ? m.code : `SKU-${prefix}-${String(m.id).padStart(4, '0')}`;
+      await run('UPDATE materials SET sku = ? WHERE id = ?', [genSku, m.id]);
+    }
+  } catch (skuErr) {
+    console.error('SKU population warning:', skuErr);
+  }
+
 
  // Legacy tables - keep for backward compat, do not break old data
  await run(`
@@ -386,10 +442,12 @@ async function initDatabase() {
  await run(
  `INSERT INTO company_settings (company_name, address, phone, email, gstin, logo_path, demo_seeded)
  VALUES (?, ?, ?, ?, ?, ?, 0)`,
- ['Sivakami Traders', 'Enter your company address here', '+91 XXXXX XXXXX', 'info@sivakamistraders.com', '', 'assets/logo.png']
+ ['StockLedger Global Trade Ltd.', 'Suite 400, Commerce Boulevard, Tech District', '+1 (800) 555-0199', 'contact@stockledger.io', 'US-TAX-849201', 'assets/logo.png']
  );
  console.log('Company settings seeded.');
+  
  }
+  await run("UPDATE company_settings SET company_name = 'StockLedger Global Trade Ltd.', email = 'contact@stockledger.io', address = 'Suite 400, Commerce Boulevard, Tech District', phone = '+1 (800) 555-0199', gstin = 'US-TAX-849201' WHERE company_name = 'Sivakami Traders' OR company_name = 'StockLedger Global Trade Ltd.' AND (phone LIKE '%XXXXX%' OR phone = '' OR address LIKE '%Enter your%')");
 
  // Seed initial materials only once based on demo_seeded flag
  const settings = await queryOne('SELECT demo_seeded FROM company_settings LIMIT 1');
@@ -414,13 +472,21 @@ async function initDatabase() {
   // Seed initial employees if empty
   const empCount = await queryOne('SELECT COUNT(*) as count FROM employees');
   if (!empCount || empCount.count === 0) {
-    await run("INSERT INTO employees (name, role) VALUES ('Sabarish', 'Proprietor')");
-    await run("INSERT INTO employees (name, role) VALUES ('Arumugam', 'Manager')");
-    await run("INSERT INTO employees (name, role) VALUES ('Ramakrishnan', 'Accountant')");
-    await run("INSERT INTO employees (name, role) VALUES ('Satheesh', 'Supervisor')");
-    await run("INSERT INTO employees (name, role) VALUES ('Sailesh', 'Worker')");
+    await run("INSERT INTO employees (name, role) VALUES ('Alexander Morgan', 'Operations Director')");
+    await run("INSERT INTO employees (name, role) VALUES ('Sarah Jenkins', 'Logistics Manager')");
+    await run("INSERT INTO employees (name, role) VALUES ('David Chen', 'Inventory Controller')");
+    await run("INSERT INTO employees (name, role) VALUES ('Elena Rostova', 'Senior Accountant')");
+    await run("INSERT INTO employees (name, role) VALUES ('Marcus Vance', 'Warehouse Supervisor')");
     console.log('Preloaded personnel seeded successfully.');
   }
+
+  // Migrate legacy employee names if present
+  await run("UPDATE employees SET name = 'Alexander Morgan', role = 'Operations Director' WHERE name = 'Sabarish'");
+  await run("UPDATE employees SET name = 'Sarah Jenkins', role = 'Logistics Manager' WHERE name = 'Arumugam'");
+  await run("UPDATE employees SET name = 'David Chen', role = 'Inventory Controller' WHERE name = 'Ramakrishnan'");
+  await run("UPDATE employees SET name = 'Elena Rostova', role = 'Senior Accountant' WHERE name = 'Satheesh'");
+  await run("UPDATE employees SET name = 'Marcus Vance', role = 'Warehouse Supervisor' WHERE name = 'Sailesh'");
+
 
   // Create unified expenses table
   await run(`
@@ -487,7 +553,7 @@ async function initDatabase() {
 }
 
 // Initialize tables and seed
-initDatabase();
+const initPromise = initDatabase();
 
 function normalizeMoney(value) {
   const amount = Number(value);
@@ -1088,5 +1154,7 @@ module.exports = {
   getPersonalExpenseBreakdown,
   getDailyExpenseSummary,
   getMonthlyExpenseTrend,
-  getReportData
+  getReportData,
+  initDatabase,
+  initPromise
 };

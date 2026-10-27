@@ -1,7 +1,7 @@
 {
-  "name": "sivakami-traders-inventory",
-  "version": "1.0.0",
-  "description": "Offline desktop inventory management application for Sivakami Traders",
+  "name": "stockledger-inventory-system",
+  "version": "2.0.0",
+  "description": "StockLedger — Modern Enterprise Inventory Management & Billing System",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,9 +12,12 @@
     "electron",
     "sqlite",
     "inventory",
-    "sivakami-traders"
+    "billing",
+    "stockledger",
+    "pos",
+    "portfolio"
   ],
-  "author": "Naveen",
+  "author": "Portfolio Project",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

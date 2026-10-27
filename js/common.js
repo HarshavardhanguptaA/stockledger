@@ -1,5 +1,5 @@
 /**
- * Shared Utility Functions for Sivakami Traders Frontend
+ * StockLedger — Shared Utility Functions for Frontend
  */
 
 // Handle User Session and Navigation setup on DOMContentLoaded

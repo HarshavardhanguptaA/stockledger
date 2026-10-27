@@ -1,7 +1,7 @@
 module.exports = {
   packagerConfig: {
-    name: 'Sivakami Traders',
-    executableName: 'sivakami-traders',
+    name: 'StockLedger',
+    executableName: 'stockledger',
     icon: 'assets/logo',
     asar: true,
   },
@@ -10,7 +10,7 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'sivakami_traders',
+        name: 'stockledger',
         setupIcon: 'assets/logo.ico',
       },
     },

@@ -35,17 +35,18 @@ document.addEventListener('DOMContentLoaded', async () => {
  async function loadDashboardStats() {
  try {
  const stats = await window.api.getDashboardStats();
- document.getElementById('stat-cement-bags').textContent = (stats.cementBagsAvailable || 0).toLocaleString('en-IN') + ' Bags';
- document.getElementById('stat-low-cement').textContent = stats.lowCementStockCount;
+ document.getElementById('stat-cement-bags').textContent = (stats.totalStockUnits ?? stats.cementBagsAvailable ?? 0).toLocaleString('en-IN') + ' Units';
+ document.getElementById('stat-low-cement').textContent = stats.lowStockCount ?? stats.lowCementStockCount ?? 0;
  document.getElementById('stat-today-sales').textContent = '₹' + (stats.todaySalesAmount || 0).toFixed(2);
  document.getElementById('stat-outstanding').textContent = '₹' + (stats.totalOutstanding || 0).toFixed(2);
  document.getElementById('stat-expenses').textContent = '₹' + (stats.todayExpenses || 0).toFixed(2);
  document.getElementById('stat-receipts-count').textContent = stats.totalReceipts;
 
  const alertDiv = document.getElementById('dashboard-alert');
- if (stats.lowCementStockCount > 0) {
- alertDiv.style.cssText = 'display:block;padding:16px;margin-bottom:24px;border-radius:var(--border-radius-md);background-color:var(--danger-bg);color:var(--danger-color);border:1px solid rgba(198,40,40,0.25);font-weight:600;';
- alertDiv.innerHTML = ` <strong>Low Cement Stock Alert:</strong> ${stats.lowCementStockCount} cement product(s) are below minimum stock level. <a href="materials.html" style="color:var(--danger-color);text-decoration:underline;">View Materials →</a>`;
+ const lowAlertCount = stats.lowStockCount ?? stats.lowCementStockCount ?? 0;
+    if (lowAlertCount > 0) {
+      alertDiv.style.cssText = 'display:block;padding:16px;margin-bottom:24px;border-radius:var(--border-radius-md);background-color:var(--danger-bg);color:var(--danger-color);border:1px solid rgba(220,38,38,0.25);font-weight:600;';
+      alertDiv.innerHTML = `⚠️ <strong>Low Stock Alert:</strong> ${lowAlertCount} product(s) are below minimum reorder level. <a href="materials.html" style="color:var(--danger-color);text-decoration:underline;font-weight:700;">View Inventory →</a>`;
  } else {
  alertDiv.style.display = 'none';
  }
@@ -69,10 +70,11 @@ document.addEventListener('DOMContentLoaded', async () => {
  // Cement Stock Summary Table
  const summaryTbody = document.getElementById('cement-stock-summary-body');
  summaryTbody.innerHTML = '';
- if (!stats.cementStockSummary || stats.cementStockSummary.length === 0) {
- summaryTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No cement products found.</td></tr>';
- } else {
- stats.cementStockSummary.forEach(m => {
+ const itemsSummary = stats.stockSummary || stats.cementStockSummary || [];
+    if (!itemsSummary || itemsSummary.length === 0) {
+      summaryTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No products registered yet.</td></tr>';
+    } else {
+      itemsSummary.forEach(m => {
  summaryTbody.innerHTML += `
  <tr>
  <td><strong>${escapeHtml(m.name)}</strong></td>

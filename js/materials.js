@@ -48,10 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
  : '<span class="status-badge available">Available</span>';
  const stockColor = isLow ? 'color:var(--danger-color);font-weight:bold' : 'color:var(--success-color);font-weight:bold';
  
- const tr = document.createElement('tr');
- tr.innerHTML = `
- <td style="color:var(--text-muted);font-size:12px;font-weight:600;">${i + 1}</td>
- <td><strong>${escapeHtml(m.name)}</strong></td>
+ const skuVal = m.sku || ('SKU-' + String(m.id).padStart(4, '0'));
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--text-muted);font-size:12px;font-weight:600;">${i + 1}</td>
+      <td><span style="font-family:monospace;font-size:11.5px;font-weight:700;color:var(--primary-color);background:var(--primary-light);padding:3px 7px;border-radius:4px;border:1px solid rgba(37,99,235,0.15);">${escapeHtml(skuVal)}</span></td>
+      <td><strong>${escapeHtml(m.name)}</strong></td>
  <td>${escapeHtml(m.category || '-')}</td>
  <td>${escapeHtml(m.unit)}</td>
  <td>₹${parseFloat(m.rate || 0).toFixed(2)}</td>
@@ -85,10 +87,11 @@ document.addEventListener('DOMContentLoaded', () => {
  document.getElementById('mat-search').addEventListener('input', (e) => {
  const q = e.target.value.toLowerCase();
  const filtered = allMaterials.filter(m =>
- m.name.toLowerCase().includes(q) ||
- (m.category || '').toLowerCase().includes(q) ||
- m.unit.toLowerCase().includes(q)
- );
+      m.name.toLowerCase().includes(q) ||
+      (m.sku || '').toLowerCase().includes(q) ||
+      (m.category || '').toLowerCase().includes(q) ||
+      m.unit.toLowerCase().includes(q)
+    );
  renderTable(filtered);
  });
 
@@ -96,7 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
  document.getElementById('add-material-form').addEventListener('submit', async (e) => {
  e.preventDefault();
  document.getElementById('add-mat-alert').style.display = 'none';
- const name = document.getElementById('mat-name').value.trim();
+ const sku = document.getElementById('mat-sku') ? document.getElementById('mat-sku').value.trim() : '';
+    const name = document.getElementById('mat-name').value.trim();
  const category = document.getElementById('mat-category').value.trim();
  const unit = document.getElementById('mat-unit').value.trim();
  const rate = parseFloat(document.getElementById('mat-rate').value) || 0;
@@ -106,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
  if (!name) return showAlert('add-mat-alert', 'Material name is required.');
  if (!unit) return showAlert('add-mat-alert', 'Unit is required.');
 
- const result = await window.api.addMaterial({ name, category, unit, current_stock, minimum_stock, rate });
+ const result = await window.api.addMaterial({ name, category, unit, current_stock, minimum_stock, rate, sku });
  if (result.success) {
  showToast(` Material "${name}" added successfully!`);
  e.target.reset();
