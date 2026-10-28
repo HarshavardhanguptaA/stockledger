@@ -2,14 +2,21 @@
   "name": "stockledger-inventory-system",
   "version": "2.0.0",
   "description": "StockLedger — Modern Enterprise Inventory Management & Billing System",
-  "main": "main.js",
+  "main": "server.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node server.js",
+    "build": "npm rebuild sqlite3 --build-from-source || true",
+    "server": "node server.js",
+    "electron": "electron .",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
+  "engines": {
+    "node": ">=18.0.0 <22.0.0"
+  },
   "keywords": [
     "electron",
+    "express",
     "sqlite",
     "inventory",
     "billing",
@@ -22,7 +29,9 @@
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "sqlite3": "^6.0.1"
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.3",
