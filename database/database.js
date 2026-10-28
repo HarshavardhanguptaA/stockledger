@@ -2,7 +2,13 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
-const { app } = require('electron');
+// Make Electron optional so this module works in both Electron and web-server mode
+let app;
+try {
+  app = require('electron').app;
+} catch (e) {
+  app = null;
+}
 
 // Determine database path
 let dbPath;
